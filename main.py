@@ -34,6 +34,9 @@ class AuthRequest(BaseModel):
 
 
 # ---------------- AUTH ENDPOINT ----------------
+@app.get("/")
+def health():
+    return {"status": "running"}
 @app.post("/auth")
 def auth(data: AuthRequest):
 
@@ -113,4 +116,5 @@ def auth(data: AuthRequest):
     else:
         cur.close()
         conn.close()
+
         raise HTTPException(status_code=400, detail="Invalid action")
