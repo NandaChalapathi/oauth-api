@@ -171,7 +171,13 @@ def insert_risk_features(cur, conn, user_id, features):
         features["api_rate_7d_avg"]
     ))
     conn.commit()
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 @app.post("/auth")
 def auth(data: AuthRequest):
     conn = get_db()
@@ -244,3 +250,4 @@ def auth(data: AuthRequest):
         cur.close()
         conn.close()
         raise HTTPException(status_code=400, detail="Invalid action")
+
