@@ -8,16 +8,6 @@ import time
 import math
 
 app = FastAPI()
-
-# ---------------- CORS ----------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # ---------------- DATABASE CONNECTION ----------------
 def get_db():
     return mysql.connector.connect(
@@ -304,3 +294,4 @@ def auth(data: AuthRequest):
         cur.close()
         conn.close()
         raise HTTPException(status_code=400, detail="Invalid action")
+
