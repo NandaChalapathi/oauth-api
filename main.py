@@ -8,7 +8,6 @@ import time
 import math
 
 app = FastAPI()
-# ---------------- DATABASE CONNECTION ----------------
 def get_db():
     return mysql.connector.connect(
         host=os.getenv("DB_HOST"),
@@ -18,12 +17,10 @@ def get_db():
         port=int(os.getenv("DB_PORT"))
     )
 
-# ---------------- HEALTH ROUTE ----------------
 @app.get("/")
 def health():
     return {"status": "running"}
 
-# ---------------- REQUEST MODEL ----------------
 class AuthRequest(BaseModel):
     userId: str | None = None
     email: str | None = None
@@ -31,11 +28,6 @@ class AuthRequest(BaseModel):
     action: str
     session_id: str | None = None
     device_id: str | None = None
-
-
-# =====================================================
-# ================= FEATURE FUNCTIONS =================
-# =====================================================
 
 def insert_login_event(cur, conn, user_id, session_id, device_id):
     now_ts = int(time.time() * 1000)
@@ -53,7 +45,6 @@ def insert_login_event(cur, conn, user_id, session_id, device_id):
     ))
     conn.commit()
 
-
 def get_device_count(cur, user_id):
     cur.execute("""
         SELECT COUNT(DISTINCT device_id)
@@ -61,7 +52,6 @@ def get_device_count(cur, user_id):
         WHERE user_id=%s
     """, (user_id,))
     return cur.fetchone()[0] or 0
-
 
 def get_session_duration(cur, session_id):
     cur.execute("""
@@ -71,7 +61,6 @@ def get_session_duration(cur, session_id):
     """, (session_id,))
     result = cur.fetchone()[0]
     return result or 0
-
 
 def get_avg_session_duration(cur):
     cur.execute("""
@@ -84,7 +73,6 @@ def get_avg_session_duration(cur):
     result = cur.fetchone()[0]
     return result or 0
 
-
 def get_last_24h_logins(cur, user_id):
     cur.execute("""
         SELECT COUNT(*)
@@ -94,7 +82,6 @@ def get_last_24h_logins(cur, user_id):
           AND received_at > NOW() - INTERVAL 24 HOUR
     """, (user_id,))
     return cur.fetchone()[0] or 0
-
 
 def get_failed_login_ratio(cur, user_id):
     cur.execute("""
@@ -108,7 +95,6 @@ def get_failed_login_ratio(cur, user_id):
     result = cur.fetchone()[0]
     return float(result) if result else 0
 
-
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371
     dlat = math.radians(lat2 - lat1)
@@ -120,7 +106,6 @@ def haversine(lat1, lon1, lat2, lon2):
         math.sin(dlon / 2) ** 2
     )
     return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
-
 
 def get_geo_jump(cur, user_id):
     cur.execute("""
@@ -138,7 +123,6 @@ def get_geo_jump(cur, user_id):
         )
     return 0.0
 
-
 def get_api_rate_1min(cur, user_id):
     cur.execute("""
         SELECT COUNT(*)
@@ -148,7 +132,6 @@ def get_api_rate_1min(cur, user_id):
           AND received_at > NOW() - INTERVAL 1 MINUTE
     """, (user_id,))
     return cur.fetchone()[0] or 0
-
 
 def get_api_rate_7d(cur, user_id):
     cur.execute("""
@@ -161,8 +144,6 @@ def get_api_rate_7d(cur, user_id):
     result = cur.fetchone()[0]
     return result or 0
 
-
-# ---------------- INSERT INTO RISK TABLE ----------------
 def insert_risk_features(cur, conn, user_id, features):
     cur.execute("""
         INSERT INTO user_risk_features (
@@ -191,23 +172,13 @@ def insert_risk_features(cur, conn, user_id, features):
     ))
     conn.commit()
 
-
-# =====================================================
-# ================= AUTH ENDPOINT =====================
-# =====================================================
-
 @app.post("/auth")
 def auth(data: AuthRequest):
-
     conn = get_db()
     cur = conn.cursor()
-
-    # ---------------- REGISTER ----------------
     if data.action == "register":
-
         if not data.email:
             raise HTTPException(status_code=400, detail="Email required")
-
         try:
             cur.execute("""
                 INSERT INTO WebsiteUsers (email, password, created_at, isEmailSent)
@@ -216,12 +187,9 @@ def auth(data: AuthRequest):
                 data.email,
                 data.password
             ))
-
             conn.commit()
-
             new_id = cur.lastrowid
             generated_user_id = f"P-U{new_id:04d}"
-
             cur.execute("""
                 UPDATE WebsiteUsers
                 SET username = %s
@@ -230,41 +198,28 @@ def auth(data: AuthRequest):
                 generated_user_id,
                 new_id
             ))
-
             conn.commit()
-
             cur.close()
             conn.close()
-
             return {
                 "success": True,
                 "user_id": generated_user_id
             }
-
         except Exception:
             cur.close()
             conn.close()
             return {"success": False}
-
-    # ---------------- LOGIN ----------------
     elif data.action == "login":
-
         if not data.userId:
             raise HTTPException(status_code=400, detail="User ID required")
-
         cur.execute("""
             SELECT password FROM WebsiteUsers WHERE username=%s
         """, (data.userId,))
-
         user = cur.fetchone()
-
         if user and data.password == user[0]:
-
             session_id = data.session_id or str(uuid.uuid4())
             device_id = data.device_id or "web_device"
-
             insert_login_event(cur, conn, data.userId, session_id, device_id)
-
             features = {
                 "device_count": get_device_count(cur, data.userId),
                 "session_duration": get_session_duration(cur, session_id),
@@ -275,23 +230,17 @@ def auth(data: AuthRequest):
                 "api_rate_1min": get_api_rate_1min(cur, data.userId),
                 "api_rate_7d_avg": get_api_rate_7d(cur, data.userId),
             }
-
             insert_risk_features(cur, conn, data.userId, features)
-
             cur.close()
             conn.close()
-
             return {
                 "success": True,
                 "features": features
             }
-
         cur.close()
         conn.close()
         return {"success": False}
-
     else:
         cur.close()
         conn.close()
         raise HTTPException(status_code=400, detail="Invalid action")
-
