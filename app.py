@@ -12,7 +12,7 @@ app = Flask(__name__)
 threshold = np.load("threshold.npy")
 iForest_Score_Train = np.load("iForest_Score_Train.npy")
 
-iForest = jb.load("Final Copy/Model/IsolationForest_v1.pkl")
+iForest = jb.load("IsolationForest_v1.pkl")
 
 
 # ==============================
@@ -87,3 +87,4 @@ def predict():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
