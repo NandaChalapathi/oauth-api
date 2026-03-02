@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import numpy as np
 import pandas as pd
 import joblib as jb
-
+import os
 app = Flask(__name__)
 
 # ==============================
@@ -84,7 +84,6 @@ def predict():
 # ==============================
 # Run Server
 # ==============================
-
 if __name__ == "__main__":
-    app.run(debug=True)
-
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
