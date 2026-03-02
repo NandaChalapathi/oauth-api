@@ -1,9 +1,12 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import numpy as np
 import pandas as pd
 import joblib as jb
 import os
+
 app = Flask(__name__)
+CORS(app)   # ✅ Enable CORS
 
 # ==============================
 # Load Model + Files
@@ -11,23 +14,17 @@ app = Flask(__name__)
 
 threshold = np.load("threshold.npy")
 iForest_Score_Train = np.load("iForest_Score_Train.npy")
-
 iForest = jb.load("IsolationForest_v1.pkl")
-
 
 # ==============================
 # Core Functions
 # ==============================
 
 def decision_function(raw_data):
-    # Negative because anomaly → higher score
     return -iForest.decision_function(raw_data)[0]
 
-
 def normalize_score(iForest_score):
-    # Percentile normalization
     return (iForest_Score_Train < iForest_score).mean()
-
 
 def label_and_risk(score):
     label = -1 if score >= threshold else 1
@@ -43,7 +40,25 @@ def label_and_risk(score):
 
 
 # ==============================
-# Prediction API
+# Health Check Endpoint ✅
+# ==============================
+
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "status": "API is running",
+        "model": "IsolationForest",
+        "version": "1.0"
+    })
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "healthy"}), 200
+
+
+# ==============================
+# Prediction Endpoint
 # ==============================
 
 @app.route("/predict", methods=["POST"])
@@ -62,13 +77,8 @@ def predict():
             "session_trend": [data["session_trend"]],
         })
 
-        # Step 1: Get raw anomaly score
         iForest_score = decision_function(df)
-
-        # Step 2: Normalize (0–1)
         score = normalize_score(iForest_score)
-
-        # Step 3: Label + Risk
         label, risk = label_and_risk(score)
 
         return jsonify({
@@ -82,8 +92,9 @@ def predict():
 
 
 # ==============================
-# Run Server
+# Render Production Config
 # ==============================
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
