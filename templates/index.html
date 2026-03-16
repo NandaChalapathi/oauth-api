@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Authentication</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<style>
+:root{
+  --danger:#ff3b3b;
+  --success:#00e08a;
+  --dark:#384959;
+}
+
+body{
+  font-family:sans-serif;
+  background:#f8f9fa;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+}
+
+.card-box{
+  width:340px;
+  padding:25px;
+  background:#fff;
+  border-radius:12px;
+  box-shadow:0 8px 25px rgba(0,0,0,0.08);
+}
+
+h2{
+  text-align:center;
+  font-size:1.1rem;
+  margin-bottom:20px;
+  font-weight:700;
+  color:var(--dark);
+}
+
+.form-control{
+  margin-bottom:15px;
+  border-radius:8px;
+}
+
+.btn-main{
+  width:100%;
+  padding:10px;
+  border:none;
+  border-radius:50px;
+  background:linear-gradient(135deg,#ff6b6b,var(--danger));
+  color:#fff;
+  font-weight:600;
+}
+
+.btn-main:disabled{
+  opacity:0.6;
+}
+
+.loader{
+  display:none;
+  text-align:center;
+  margin-top:12px;
+}
+
+.loader div{
+  width:6px;
+  height:6px;
+  background:#ff3b3b;
+  display:inline-block;
+  border-radius:50%;
+  margin:2px;
+  animation:move .5s linear infinite;
+}
+
+@keyframes move{
+  100%{transform:translateX(6px);}
+}
+
+.successBox,.failBox{
+  margin-top:15px;
+  padding:10px;
+  border-radius:8px;
+  text-align:center;
+  font-size:0.9rem;
+}
+
+.successBox{background:#e9f7ef;color:#0f5132;}
+.failBox{background:#ffecef;color:#6b1b1b;}
+
+.toggle-text{
+  text-align:center;
+  font-size:0.85rem;
+  margin-top:12px;
+}
+.toggle-text a{
+  cursor:pointer;
+  font-weight:600;
+  text-decoration:none;
+}
+.toggle-text a:hover{
+  text-decoration:underline;
+}
+</style>
+</head>
+
+<body>
+
+<div class="card-box">
+  <h2 id="formTitle">Login</h2>
+
+  <form id="authForm">
+    <input id="userId" class="form-control" placeholder="Enter User ID">
+    <input id="email" type="email" class="form-control" placeholder="Enter Email" style="display:none;">
+    <input id="password" type="password" class="form-control" placeholder="Enter Password" required>
+    <input id="confirmPassword" type="password" class="form-control" placeholder="Confirm Password" style="display:none;">
+    <button class="btn-main" id="submitBtn" type="submit">Login</button>
+  </form>
+
+  <div class="toggle-text">
+    <span id="toggleText">Don't have an account?</span>
+    <a id="toggleBtn">Register</a>
+  </div>
+
+  <div class="loader" id="loader">
+    <div></div><div></div><div></div>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+const WEBHOOK_URL = "https://test-geoip1.onrender.com/event";
+
+/* ================= ELEMENTS ================= */
+const form = document.getElementById("authForm");
+const userInput = document.getElementById("userId");
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const confirmInput = document.getElementById("confirmPassword");
+const submitBtn = document.getElementById("submitBtn");
+const loader = document.getElementById("loader");
+const resultBox = document.getElementById("result");
+const toggleBtn = document.getElementById("toggleBtn");
+const toggleText = document.getElementById("toggleText");
+const formTitle = document.getElementById("formTitle");
+
+let mode = "login";
+
+/* ================= SESSION & DEVICE ================= */
+let session_id = sessionStorage.getItem("session_id");
+if (!session_id) {
+  session_id = crypto.randomUUID();
+  sessionStorage.setItem("session_id", session_id);
+}
+
+let device_id = sessionStorage.getItem("device_id");
+
+async function getDeviceId() {
+  const raw = [
+    navigator.userAgent,
+    navigator.platform,
+    navigator.language,
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+    screen.width + "x" + screen.height
+  ].join("|");
+
+  const data = new TextEncoder().encode(raw);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+(async () => {
+  if (!device_id) {
+    device_id = await getDeviceId();
+    sessionStorage.setItem("device_id", device_id);
+  }
+})();
+
+/* ================= UI HELPERS ================= */
+function showLoader(show) {
+  loader.style.display = show ? "block" : "none";
+  submitBtn.disabled = show;
+}
+
+function showResult(success, msg) {
+  resultBox.className = success ? "successBox" : "failBox";
+  resultBox.innerText = msg;
+}
+
+function resetMessages() {
+  resultBox.innerText = "";
+  resultBox.className = "";
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/* ================= TOGGLE LOGIN / REGISTER ================= */
+toggleBtn.addEventListener("click", () => {
+  resetMessages();
+
+  if (mode === "login") {
+    mode = "register";
+    formTitle.innerText = "Register";
+    submitBtn.innerText = "Register";
+    userInput.style.display = "none";
+    emailInput.style.display = "block";
+    confirmInput.style.display = "block";
+    toggleText.innerText = "Already have an account?";
+    toggleBtn.innerText = "Login";
+  } else {
+    mode = "login";
+    formTitle.innerText = "Login";
+    submitBtn.innerText = "Login";
+    userInput.style.display = "block";
+    emailInput.style.display = "none";
+    confirmInput.style.display = "none";
+    toggleText.innerText = "Don't have an account?";
+    toggleBtn.innerText = "Register";
+  }
+});
+
+/* ================= FORM SUBMIT ================= */
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  resetMessages();
+
+  const password = passwordInput.value.trim();
+
+  if (mode === "login") {
+    const userId = userInput.value.trim();
+
+    if (!userId || !password) {
+      showResult(false, "Please enter User ID and Password.");
+      return;
+    }
+
+    await sendRequest({
+      action: "login",
+      userId,
+      password,
+      session_id,
+      device_id,
+      event_ts: Date.now()
+    });
+
+  } else {
+    const email = emailInput.value.trim();
+
+    if (!email || !password) {
+      showResult(false, "Please enter Email and Password.");
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      showResult(false, "Invalid email format.");
+      return;
+    }
+
+    if (password !== confirmInput.value.trim()) {
+      showResult(false, "Passwords do not match.");
+      return;
+    }
+
+    await sendRequest({
+      action: "register",
+      email,
+      password,
+      session_id,
+      device_id,
+      event_ts: Date.now()
+    });
+  }
+});
+
+/* ================= API CALL ================= */
+async function sendRequest(payload) {
+  showLoader(true);
+
+  try {
+    const res = await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const raw = await res.json();
+    const result = Array.isArray(raw) ? raw[0] : raw;
+
+    showLoader(false);
+
+    if (result?.success === true) {
+      showResult(true, mode === "login"
+        ? "Login Successful."
+        : "Registration Successful! Check your email.");
+    } else {
+      showResult(false, result?.message || "Login Failed");
+    }
+  } catch (err) {
+    showLoader(false);
+    showResult(false, "Server error. Please try again later.");
+  }
+}
+</script>
+
+</body>
+</html>
